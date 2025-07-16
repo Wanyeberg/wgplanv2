@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Besorgungsmatrix</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⭐</text></svg>">
+    <link rel="stylesheet" href="style.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-app.js" type="module"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.15.0/firebase-database.js" type="module"></script>
+    
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script type="module" src="js/main.js" defer></script>
+</head>
+<body>
+
+    <!-- NEU: Der Hintergrund-Canvas für den parallaxen Sternenhimmel -->
+    <canvas id="starfield-canvas"></canvas>
+
+    <!-- Der Haupt-Canvas für die Galaxie-Interaktion -->
+    <canvas id="galaxy-canvas"></canvas>
+
+    <div class="top-right-controls">
+        <div class="ui-button" id="shopping-mode-toggle" title="Einkaufsmodus">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.07 19.34a2 2 0 0 0 2.59 2.59l2.5-1.12a2 2 0 0 0 1.14-1.14l1.12-2.5a2 2 0 0 0-2.59-2.59l-2.5 1.12a2 2 0 0 0-1.14 1.14z"/><path d="m12 12 2-4-4 2 2 2z"/><path d="M15.54 8.46a2 2 0 0 0-2.59-2.59l-2.5 1.12a2 2 0 0 0-1.14 1.14l-1.12 2.5a2 2 0 0 0 2.59 2.59l2.5-1.12a2 2 0 0 0 1.14-1.14z"/><path d="M12 22s5-4 5-10-5-10-5-10-5 4-5 10 5 10 5 10z"/></svg>
+        </div>
+        <div class="ui-button" id="archive-toggle" title="Archiv">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+        </div>
+    </div>
+
+    <div class="ui-button" id="add-item-button" title="Neuen Artikel hinzufügen">+</div>
+
+    <!-- Modal 1: Kategorie-Auswahl -->
+    <div id="category-select-overlay" class="overlay">
+        <div class="modal-content">
+            <h2>Wähle ein Sternbild</h2>
+            <div id="category-list-container">
+                <!-- Kategorien werden hier per JS eingefügt -->
+            </div>
+            <div id="add-new-category-form" class="hidden">
+                <div class="form-group">
+                    <label for="new-category-name">Name der neuen Kategorie</label>
+                    <input type="text" id="new-category-name" placeholder="z.B. Vorratskammer">
+                </div>
+                <button id="add-new-category-button" class="modal-button btn-primary">Neue Kategorie erstellen</button>
+            </div>
+            <div class="modal-actions">
+                <button id="show-add-category-button" class="modal-button btn-secondary">+ Neue Kategorie</button>
+                <button type="button" id="cancel-category-select" class="modal-button btn-secondary">Abbrechen</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal 2: Artikel hinzufügen -->
+    <div id="add-item-overlay" class="overlay">
+        <div class="modal-content">
+            <h2 id="add-item-modal-title">Neuer Stern in ...</h2>
+            <form id="add-item-form">
+                <div class="form-group">
+                    <label for="item-name">Was wird gebraucht?</label>
+                    <input type="text" id="item-name" placeholder="z.B. Hafermilch" required>
+                </div>
+                <div class="form-group">
+                    <label>Priorität</label>
+                    <div class="priority-group">
+                        <label><input type="radio" name="priority" value="Normal" checked> Normal</label>
+                        <label><input type="radio" name="priority" value="Urgent"> 🚨 Dringend</label>
+                        <label><input type="radio" name="priority" value="Low"> 💤 Niedrig</label>
+                    </div>
+                </div>
+                <div class="modal-actions">
+                    <button type="button" id="cancel-add-item" class="modal-button btn-secondary">Abbrechen</button>
+                    <button type="submit" class="modal-button btn-primary">Hinzufügen</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Die restlichen UI-Elemente -->
+    <div id="detail-sidebar">
+        <h2 id="detail-name"></h2>
+        <div class="sidebar-actions">
+            <span id="detail-category" class="category-badge"></span>
+            <button id="delete-item-button" class="action-button delete-button" title="Artikel löschen">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path><line x1="10" y1="11" x2="10" y2="17"></line><line x1="14" y1="11" x2="14" y2="17"></line></svg>
+            </button>
+        </div>
+        <div class="detail-item" id="detail-priority-wrapper" style="display: none;">
+            <strong>Priorität:</strong>
+            <span id="detail-priority"></span>
+        </div>
+        <div class="detail-item">
+            <strong>Zugewiesen an:</strong>
+            <div id="assign-users">
+                <div class="user-avatar" id="user-du" data-user="Du" title="Ich übernehme das!">Du</div>
+                <div class="user-avatar" id="user-alex" data-user="Alex" title="Alex zuweisen">A</div>
+                <div class="user-avatar" id="user-mia" data-user="Mia" title="Mia zuweisen">M</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="shopping-list-view" class="list-view">
+        <div class="list-content">
+            <h1>Meine Mission</h1>
+            <div id="shopping-list-items"></div>
+            <p id="empty-shopping-list" class="empty-list-message" style="display: none;">Du hast dir aktuell keine Aufgaben zugewiesen.</p>
+        </div>
+    </div>
+
+    <div id="archive-view" class="list-view">
+        <div class="list-content">
+            <h1>Archiv (Schwarzes Loch)</h1>
+            <div id="archive-list-items"></div>
+            <p id="empty-archive-list" class="empty-list-message">Noch keine Besorgungen erledigt.</p>
+        </div>
+    </div>
+
+</body>
+</html>
